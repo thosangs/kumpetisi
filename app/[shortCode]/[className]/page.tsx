@@ -202,41 +202,45 @@ function EnhancedRaceResultsTable({
   });
 
   // Calculate aggregate results for each participant
-  const aggregateResults = participants.map((participant) => {
-    const participantResults = raceResults.map(({ race, results }) => {
-      const result = results.find((r) => r.participantId === participant.id);
+  const aggregateResults = React.useMemo(() => {
+    const results = participants.map((participant) => {
+      const participantResults = raceResults.map(({ race, results }) => {
+        const result = results.find((r) => r.participantId === participant.id);
+        return {
+          raceId: race.id,
+          raceName: race.name,
+          startPosition: result?.startPosition || 0,
+          finishPosition: result?.finishPosition || 0,
+          penaltyPoints: result?.penaltyPoints || 0,
+        };
+      });
+
+      // Calculate total points (sum of finish positions + penalties)
+      const totalPoints = participantResults.reduce(
+        (sum, result) => sum + result.finishPosition + result.penaltyPoints,
+        0
+      );
+
       return {
-        raceId: race.id,
-        raceName: race.name,
-        startPosition: result?.startPosition || 0,
-        finishPosition: result?.finishPosition || 0,
-        penaltyPoints: result?.penaltyPoints || 0,
+        participant,
+        results: participantResults,
+        totalPoints,
+        finalPosition: 0, // Will be set after sorting
       };
     });
 
-    // Calculate total points (sum of finish positions + penalties)
-    const totalPoints = participantResults.reduce(
-      (sum, result) => sum + result.finishPosition + result.penaltyPoints,
-      0
+    // Sort by total points (lower is better)
+    const sortedResults = [...results].sort(
+      (a, b) => a.totalPoints - b.totalPoints
     );
 
-    return {
-      participant,
-      results: participantResults,
-      totalPoints,
-      finalPosition: 0, // Will be set after sorting
-    };
-  });
+    // Assign final positions
+    sortedResults.forEach((result, index) => {
+      result.finalPosition = index + 1;
+    });
 
-  // Sort by total points (lower is better)
-  const sortedResults = [...aggregateResults].sort(
-    (a, b) => a.totalPoints - b.totalPoints
-  );
-
-  // Assign final positions
-  sortedResults.forEach((result, index) => {
-    result.finalPosition = index + 1;
-  });
+    return sortedResults;
+  }, [participants, raceResults]);
 
   return (
     <div>
@@ -269,7 +273,7 @@ function EnhancedRaceResultsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedResults.map((result) => (
+          {aggregateResults.map((result) => (
             <TableRow key={result.participant.id}>
               <TableCell className="font-medium">
                 {result.finalPosition}

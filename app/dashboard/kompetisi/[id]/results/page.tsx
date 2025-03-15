@@ -1,5 +1,7 @@
 "use client";
+
 export const runtime = "edge";
+
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -109,7 +111,9 @@ export default function ManageResultsPage({
     } else {
       setRaceResults([]);
     }
-  }, [selectedBatchId, races]);
+    // Only run this effect when the dependencies actually change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBatchId, JSON.stringify(races)]);
 
   const handleClassChange = (value: string) => {
     setSelectedClassId(value);

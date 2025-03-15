@@ -1,8 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useMemo } from "react";
 
-import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -84,7 +83,13 @@ export function EnhancedRaceResultsForm({
     });
 
     setResults(initialResults);
-  }, [races, participants, existingResults]);
+    // Only run this effect when the dependencies actually change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    JSON.stringify(races),
+    JSON.stringify(participants),
+    JSON.stringify(existingResults),
+  ]);
 
   const handleStartPositionChange = (
     raceId: number,
@@ -193,6 +198,15 @@ export function EnhancedRaceResultsForm({
 
   // Sort races by order
   const sortedRaces = [...races].sort((a, b) => a.order - b.order);
+
+  // Calculate final points for each participant outside the map function
+  const participantFinalPoints = useMemo(() => {
+    const points: { [participantId: number]: number | string } = {};
+    participants.forEach((participant) => {
+      points[participant.id] = calculateFinalPoints(participant.id, results);
+    });
+    return points;
+  }, [participants, results]);
 
   return (
     <Card>
@@ -323,11 +337,8 @@ export function EnhancedRaceResultsForm({
               </TableHeader>
               <TableBody>
                 {participants.map((participant) => {
-                  // Calculate final points
-                  const finalPoints = calculateFinalPoints(
-                    participant.id,
-                    results
-                  );
+                  // Get final points from memoized object
+                  const finalPoints = participantFinalPoints[participant.id];
 
                   return (
                     <TableRow key={participant.id}>
