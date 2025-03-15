@@ -1,5 +1,4 @@
-export const runtime = "edge";
-
+import React from "react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -27,7 +26,7 @@ import {
   getParticipantsByBatchId,
   getRaceResultsByRaceId,
 } from "@/lib/data";
-import type { Participant, Race, RaceResult } from "@/types";
+import type { Participant, Race } from "@/types";
 
 type Props = {
   params: { shortCode: string; className: string };
@@ -134,21 +133,10 @@ export default function ClassResultsPage({ params }: Props) {
                         <CardContent>
                           {batch.races.length > 0 ? (
                             <div className="space-y-6">
-                              {batch.races.map((race) => (
-                                <RaceResultsTable
-                                  key={race.id}
-                                  race={race}
-                                  participants={participants}
-                                  results={getRaceResultsByRaceId(race.id)}
-                                />
-                              ))}
-
-                              {batch.races.length > 1 && (
-                                <AggregateResultsTable
-                                  races={batch.races}
-                                  participants={participants}
-                                />
-                              )}
+                              <EnhancedRaceResultsTable
+                                races={batch.races}
+                                participants={participants}
+                              />
                             </div>
                           ) : (
                             <p className="text-muted-foreground">
@@ -190,127 +178,57 @@ function getStageStatusBadge(status: string) {
   }
 }
 
-interface RaceResultsTableProps {
-  race: Race;
-  participants: Participant[];
-  results: RaceResult[];
-}
-
-function RaceResultsTable({
-  race,
-  participants,
-  results,
-}: RaceResultsTableProps) {
-  // Sort results by position
-  const sortedResults = [...results].sort((a, b) => a.position - b.position);
-
-  return (
-    <div>
-      <h3 className="text-lg font-medium mb-3">
-        {race.name} {getRaceStatusBadge(race.status)}
-      </h3>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Position</TableHead>
-            <TableHead>Number</TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Nickname</TableHead>
-            <TableHead>Club</TableHead>
-            <TableHead>Penalty</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sortedResults.map((result) => {
-            const participant = participants.find(
-              (p) => p.id === result.participantId
-            );
-
-            if (!participant) return null;
-
-            return (
-              <TableRow key={result.id}>
-                <TableCell className="font-medium">{result.position}</TableCell>
-                <TableCell>{participant.number}</TableCell>
-                <TableCell>{participant.name}</TableCell>
-                <TableCell>{participant.nickname}</TableCell>
-                <TableCell>{participant.club}</TableCell>
-                <TableCell>
-                  {result.penaltyPoints > 0 ? (
-                    <Badge variant="destructive">+{result.penaltyPoints}</Badge>
-                  ) : (
-                    "-"
-                  )}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-function getRaceStatusBadge(status: string) {
-  switch (status) {
-    case "completed":
-      return <Badge className="ml-2 bg-green-600">Completed</Badge>;
-    case "in_progress":
-      return <Badge className="ml-2 bg-kumpetisi-blue">In Progress</Badge>;
-    case "scheduled":
-      return (
-        <Badge className="ml-2" variant="outline">
-          Scheduled
-        </Badge>
-      );
-    default:
-      return (
-        <Badge className="ml-2" variant="outline">
-          {status}
-        </Badge>
-      );
-  }
-}
-
-interface AggregateResultsTableProps {
+interface EnhancedRaceResultsTableProps {
   races: Race[];
   participants: Participant[];
 }
 
-function AggregateResultsTable({
+function EnhancedRaceResultsTable({
   races,
   participants,
-}: AggregateResultsTableProps) {
-  // Calculate aggregate results
-  const aggregateResults = participants.map((participant) => {
-    let totalPoints = 0;
-    let totalPenalty = 0;
+}: EnhancedRaceResultsTableProps) {
+  // Sort races by order
+  const sortedRaces = [...races].sort((a, b) => a.order - b.order);
 
-    races.forEach((race) => {
-      const results = getRaceResultsByRaceId(race.id);
-      const participantResult = results.find(
-        (r) => r.participantId === participant.id
-      );
-
-      if (participantResult) {
-        // Points are based on position (1st = 1 point, 2nd = 2 points, etc.)
-        totalPoints += participantResult.position;
-        totalPenalty += participantResult.penaltyPoints;
-      }
-    });
-
+  // Get results for all races
+  const raceResults = sortedRaces.map((race) => {
+    const results = getRaceResultsByRaceId(race.id);
     return {
-      participant,
-      totalPoints,
-      totalPenalty,
-      // Final position will be determined by sorting
-      finalPosition: 0,
+      race,
+      results,
     };
   });
 
-  // Sort by total points (lower is better) + penalties
+  // Calculate aggregate results for each participant
+  const aggregateResults = participants.map((participant) => {
+    const participantResults = raceResults.map(({ race, results }) => {
+      const result = results.find((r) => r.participantId === participant.id);
+      return {
+        raceId: race.id,
+        raceName: race.name,
+        startPosition: result?.startPosition || 0,
+        finishPosition: result?.finishPosition || 0,
+        penaltyPoints: result?.penaltyPoints || 0,
+      };
+    });
+
+    // Calculate total points (sum of finish positions + penalties)
+    const totalPoints = participantResults.reduce(
+      (sum, result) => sum + result.finishPosition + result.penaltyPoints,
+      0
+    );
+
+    return {
+      participant,
+      results: participantResults,
+      totalPoints,
+      finalPosition: 0, // Will be set after sorting
+    };
+  });
+
+  // Sort by total points (lower is better)
   const sortedResults = [...aggregateResults].sort(
-    (a, b) => a.totalPoints + a.totalPenalty - (b.totalPoints + b.totalPenalty)
+    (a, b) => a.totalPoints - b.totalPoints
   );
 
   // Assign final positions
@@ -320,18 +238,32 @@ function AggregateResultsTable({
 
   return (
     <div>
-      <h3 className="text-lg font-medium mb-3 text-kumpetisi-blue">
-        Aggregate Results
-      </h3>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Final Position</TableHead>
-            <TableHead>Number</TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Club</TableHead>
-            <TableHead>Total Points</TableHead>
-            <TableHead>Total Penalty</TableHead>
+            <TableHead rowSpan={2}>Position</TableHead>
+            <TableHead rowSpan={2}>Number</TableHead>
+            <TableHead rowSpan={2}>Name</TableHead>
+            <TableHead rowSpan={2}>Nickname</TableHead>
+            {sortedRaces.map((race) => (
+              <TableHead
+                key={race.id}
+                colSpan={3}
+                className="text-center border-x"
+              >
+                {race.name}
+              </TableHead>
+            ))}
+            <TableHead rowSpan={2}>Total Points</TableHead>
+          </TableRow>
+          <TableRow>
+            {sortedRaces.map((race) => (
+              <React.Fragment key={`header-${race.id}`}>
+                <TableHead className="text-xs">Start</TableHead>
+                <TableHead className="text-xs">Finish</TableHead>
+                <TableHead className="text-xs">Penalty</TableHead>
+              </React.Fragment>
+            ))}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -342,14 +274,30 @@ function AggregateResultsTable({
               </TableCell>
               <TableCell>{result.participant.number}</TableCell>
               <TableCell>{result.participant.name}</TableCell>
-              <TableCell>{result.participant.club}</TableCell>
-              <TableCell>{result.totalPoints}</TableCell>
-              <TableCell>
-                {result.totalPenalty > 0 ? (
-                  <Badge variant="destructive">+{result.totalPenalty}</Badge>
-                ) : (
-                  "-"
-                )}
+              <TableCell>{result.participant.nickname}</TableCell>
+
+              {result.results.map((raceResult) => (
+                <React.Fragment key={`result-${raceResult.raceId}`}>
+                  <TableCell className="border-l text-center">
+                    {raceResult.startPosition || "-"}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {raceResult.finishPosition || "-"}
+                  </TableCell>
+                  <TableCell className="border-r text-center">
+                    {raceResult.penaltyPoints > 0 ? (
+                      <Badge variant="destructive">
+                        +{raceResult.penaltyPoints}
+                      </Badge>
+                    ) : (
+                      "-"
+                    )}
+                  </TableCell>
+                </React.Fragment>
+              ))}
+
+              <TableCell className="font-medium">
+                {result.totalPoints || "-"}
               </TableCell>
             </TableRow>
           ))}

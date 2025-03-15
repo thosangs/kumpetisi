@@ -1,8 +1,6 @@
 "use client";
 
-export const runtime = "edge";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -34,7 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { RaceResultsForm } from "@/components/race-results-form";
+import { EnhancedRaceResultsForm } from "@/components/enhanced-race-results-form";
 import {
   getCompetitionById,
   getClassesByCompetitionId,
@@ -57,9 +55,11 @@ export default function ManageResultsPage({
   );
   const [selectedStageId, setSelectedStageId] = useState<string>("");
   const [selectedBatchId, setSelectedBatchId] = useState<string>("");
-  const [selectedRaceId, setSelectedRaceId] = useState<string>("");
   const [isAddingRace, setIsAddingRace] = useState(false);
   const [newRaceName, setNewRaceName] = useState("");
+  const [newRaceType, setNewRaceType] = useState<
+    "qualifying" | "semifinal" | "final"
+  >("qualifying");
 
   // Get the selected class
   const selectedClass = classes.find(
@@ -75,6 +75,9 @@ export default function ManageResultsPage({
       (b) => b.stageId.toString() === selectedStageId
     ) || [];
 
+  // Get total batch count for the selected stage
+  const totalBatchCount = batches.length;
+
   // Get races for the selected batch
   const races = selectedBatchId
     ? selectedClass?.batches.find((b) => b.id.toString() === selectedBatchId)
@@ -86,43 +89,48 @@ export default function ManageResultsPage({
     ? getParticipantsByBatchId(Number.parseInt(selectedBatchId))
     : [];
 
-  // Get race results for the selected race
-  const raceResults = selectedRaceId
-    ? getRaceResultsByRaceId(Number.parseInt(selectedRaceId))
-    : [];
+  // Get race results for all races in the selected batch
+  const [raceResults, setRaceResults] = useState<any[]>([]);
 
-  // Format race results for the form
-  const formattedResults = raceResults.map((result) => ({
-    participantId: result.participantId,
-    position: result.position,
-    penaltyPoints: result.penaltyPoints,
-  }));
+  useEffect(() => {
+    if (selectedBatchId && races.length > 0) {
+      const results = races.flatMap((race) => {
+        const raceResults = getRaceResultsByRaceId(race.id);
+        return raceResults.map((result) => ({
+          raceId: race.id,
+          participantId: result.participantId,
+          startPosition: result.startPosition || 0,
+          finishPosition: result.finishPosition || 0,
+          penaltyPoints: result.penaltyPoints,
+        }));
+      });
 
-  // Get the selected race
-  const selectedRace = races.find((r) => r.id.toString() === selectedRaceId);
+      setRaceResults(results);
+    } else {
+      setRaceResults([]);
+    }
+  }, [selectedBatchId, races]);
 
   const handleClassChange = (value: string) => {
     setSelectedClassId(value);
     setSelectedStageId("");
     setSelectedBatchId("");
-    setSelectedRaceId("");
   };
 
   const handleStageChange = (value: string) => {
     setSelectedStageId(value);
     setSelectedBatchId("");
-    setSelectedRaceId("");
   };
 
   const handleBatchChange = (value: string) => {
     setSelectedBatchId(value);
-    setSelectedRaceId("");
   };
 
   const handleAddRace = () => {
-    if (!newRaceName || !selectedBatchId) {
+    if (!newRaceName || !selectedBatchId || !newRaceType) {
       toast("Missing information", {
-        description: "Please enter a race name and select a batch.",
+        description:
+          "Please enter a race name, select a type, and select a batch.",
       });
       return;
     }
@@ -140,8 +148,9 @@ export default function ManageResultsPage({
 
   const handleSaveResults = () => {
     // In a real app, we would refresh the race results here
-    // For now, we'll just close the form
-    setSelectedRaceId("");
+    toast("Results saved", {
+      description: "Race results have been updated successfully.",
+    });
   };
 
   if (!competition) {
@@ -182,9 +191,9 @@ export default function ManageResultsPage({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="md:col-span-1">
           <CardHeader>
-            <CardTitle>Select Race</CardTitle>
+            <CardTitle>Select Batch</CardTitle>
             <CardDescription>
-              Choose a class, stage, batch, and race to manage results
+              Choose a class, stage, and batch to manage race results
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -246,7 +255,7 @@ export default function ManageResultsPage({
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="race-select">Race</Label>
+                <Label>Races</Label>
                 <Dialog open={isAddingRace} onOpenChange={setIsAddingRace}>
                   <DialogTrigger asChild>
                     <Button
@@ -270,10 +279,30 @@ export default function ManageResultsPage({
                         <Label htmlFor="race-name">Race Name</Label>
                         <Input
                           id="race-name"
-                          placeholder="Race 1"
+                          placeholder="Moto 1"
                           value={newRaceName}
                           onChange={(e) => setNewRaceName(e.target.value)}
                         />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="race-type">Race Type</Label>
+                        <Select
+                          value={newRaceType}
+                          onValueChange={(value) =>
+                            setNewRaceType(value as any)
+                          }
+                        >
+                          <SelectTrigger id="race-type">
+                            <SelectValue placeholder="Select race type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="qualifying">
+                              Qualifying
+                            </SelectItem>
+                            <SelectItem value="semifinal">Semifinal</SelectItem>
+                            <SelectItem value="final">Final</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                     <DialogFooter>
@@ -282,23 +311,45 @@ export default function ManageResultsPage({
                   </DialogContent>
                 </Dialog>
               </div>
-              <Select
-                value={selectedRaceId}
-                onValueChange={setSelectedRaceId}
-                disabled={!selectedBatchId || races.length === 0}
-              >
-                <SelectTrigger id="race-select">
-                  <SelectValue placeholder="Select a race" />
-                </SelectTrigger>
-                <SelectContent>
+
+              {races.length > 0 ? (
+                <div className="space-y-2 border rounded-md p-3">
                   {races.map((race) => (
-                    <SelectItem key={race.id} value={race.id.toString()}>
-                      {race.name} {getRaceStatusBadge(race.status)}
-                    </SelectItem>
+                    <div
+                      key={race.id}
+                      className="flex justify-between items-center"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>{race.name}</span>
+                        {getRaceStatusBadge(race.status)}
+                      </div>
+                      <Badge variant="outline">{race.type}</Badge>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              ) : (
+                <div className="text-center p-3 border rounded-md text-muted-foreground">
+                  {selectedBatchId
+                    ? "No races found. Add a race to get started."
+                    : "Select a batch to view races."}
+                </div>
+              )}
             </div>
+
+            {selectedBatchId && (
+              <div className="pt-4">
+                <h4 className="text-sm font-medium mb-2">Race Structure</h4>
+                <div className="text-sm text-muted-foreground">
+                  {totalBatchCount === 1 ? (
+                    <p>Single batch: 3 races to determine winners</p>
+                  ) : totalBatchCount === 2 ? (
+                    <p>Two batches: 2 qualifying races + 1 final race</p>
+                  ) : (
+                    <p>Multiple batches: 2 semifinal races + 1 final race</p>
+                  )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -306,18 +357,23 @@ export default function ManageResultsPage({
           <CardHeader>
             <CardTitle>Race Results</CardTitle>
             <CardDescription>
-              {selectedRace
-                ? `Manage results for ${selectedRace.name}`
-                : "Select a race to manage results"}
+              {selectedBatchId
+                ? `Manage results for ${
+                    batches.find((b) => b.id.toString() === selectedBatchId)
+                      ?.name
+                  }`
+                : "Select a batch to manage race results"}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {selectedRace && participants.length > 0 ? (
-              <RaceResultsForm
-                race={selectedRace}
+            {selectedBatchId && races.length > 0 && participants.length > 0 ? (
+              <EnhancedRaceResultsForm
+                batchId={Number.parseInt(selectedBatchId)}
+                races={races}
                 participants={participants}
-                existingResults={formattedResults}
+                existingResults={raceResults}
                 onSave={handleSaveResults}
+                totalBatchCount={totalBatchCount}
               />
             ) : (
               <div className="flex items-center justify-center h-40 border rounded-md">
@@ -326,7 +382,7 @@ export default function ManageResultsPage({
                     ? "Select a batch to view races"
                     : races.length === 0
                     ? "No races found for this batch. Add a race to get started."
-                    : "Select a race to manage results"}
+                    : "No participants found for this batch."}
                 </p>
               </div>
             )}

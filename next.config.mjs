@@ -3,6 +3,9 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  images: {
+    domains: ["placeholder.pics"],
+  },
 };
 
 export default nextConfig;
