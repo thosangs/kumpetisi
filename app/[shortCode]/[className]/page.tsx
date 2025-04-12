@@ -75,83 +75,92 @@ export default function ClassResultsPage({ params }: Props) {
     notFound();
   }
 
-  // Sort stages by order
-  const sortedStages = [...classData.stages].sort((a, b) => a.order - b.order);
+  // Get all batches across all stages and sort them by their order
+  const allBatches = classData.batches
+    .map((batch) => {
+      // Find the associated stage for this batch
+      const stage = classData.stages.find(
+        (stage) => stage.id === batch.stageId
+      );
+      return {
+        ...batch,
+        stageName: stage?.name || "",
+        stageOrder: stage?.order || 0,
+        stageStatus: stage?.status || "scheduled",
+      };
+    })
+    .sort((a, b) => {
+      // First sort by stage order
+      if (a.stageOrder !== b.stageOrder) {
+        return a.stageOrder - b.stageOrder;
+      }
+      // Then sort by batch name/number if in the same stage
+      const aNumber = parseInt(a.name.replace(/\D/g, "")) || 0;
+      const bNumber = parseInt(b.name.replace(/\D/g, "")) || 0;
+      return aNumber - bNumber;
+    });
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex items-center mb-8">
+    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
+      <div className="flex items-center mb-4 sm:mb-8">
         <Link href={`/${params.shortCode}`}>
-          <Button variant="ghost" size="icon" className="mr-2">
+          <Button variant="ghost" size="icon" className="mr-1 sm:mr-2">
             <ArrowLeftIcon className="h-4 w-4" />
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
             {classData.name} Results
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-sm sm:text-base">
             {competition.name} - {competition.date}
           </p>
         </div>
       </div>
 
-      <div className="space-y-12">
-        {sortedStages.map((stage) => {
-          const stageBatches = classData.batches.filter(
-            (batch) => batch.stageId === stage.id
-          );
+      <div className="space-y-6 sm:space-y-8">
+        {allBatches.map((batch) => {
+          const participants = getParticipantsByBatchId(batch.id);
 
           return (
-            <div key={stage.id} className="space-y-6">
-              <div className="flex items-center">
-                <h2 className="text-2xl font-bold">{stage.name}</h2>
-                {getStageStatusBadge(stage.status)}
-              </div>
-
-              {stage.status === "scheduled" ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Scheduled</CardTitle>
-                    <CardDescription>
-                      This stage has not started yet. Check back later for
-                      results.
+            <Card key={batch.id} className="border shadow-sm">
+              <CardHeader className="p-3 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg sm:text-xl">
+                      {batch.stageName} {batch.name}
+                    </CardTitle>
+                    <CardDescription className="text-sm sm:text-base">
+                      {participants.length} participants
                     </CardDescription>
-                  </CardHeader>
-                </Card>
-              ) : (
-                <div className="space-y-8">
-                  {stageBatches.map((batch) => {
-                    const participants = getParticipantsByBatchId(batch.id);
-
-                    return (
-                      <Card key={batch.id}>
-                        <CardHeader>
-                          <CardTitle>{batch.name}</CardTitle>
-                          <CardDescription>
-                            {stage.name} - {participants.length} participants
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          {batch.races.length > 0 ? (
-                            <div className="space-y-6">
-                              <EnhancedRaceResultsTable
-                                races={batch.races}
-                                participants={participants}
-                              />
-                            </div>
-                          ) : (
-                            <p className="text-muted-foreground">
-                              No races found for this batch.
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                  </div>
                 </div>
+              </CardHeader>
+
+              {batch.stageStatus === "scheduled" ? (
+                <CardContent className="p-3 sm:p-6">
+                  <p className="text-muted-foreground text-sm sm:text-base">
+                    This batch has not started yet. Check back later for
+                    results.
+                  </p>
+                </CardContent>
+              ) : (
+                <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+                  {batch.races.length > 0 ? (
+                    <div className="space-y-3 sm:space-y-6">
+                      <EnhancedRaceResultsTable
+                        races={batch.races}
+                        participants={participants}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-sm sm:text-base">
+                      No races found for this batch.
+                    </p>
+                  )}
+                </CardContent>
               )}
-            </div>
+            </Card>
           );
         })}
       </div>
@@ -221,53 +230,76 @@ function EnhancedRaceResultsTable({
         0
       );
 
+      // Add the additional factors: (0.01 * LastFinishPosition) + (0.001 * FirstStartPosition)
+      const lastFinishPosition =
+        participantResults.length > 0
+          ? participantResults[participantResults.length - 1].finishPosition
+          : 0;
+
+      const firstStartPosition =
+        participantResults.length > 0 ? participantResults[0].startPosition : 0;
+
+      const adjustedTotalPoints =
+        totalPoints + 0.01 * lastFinishPosition + 0.001 * firstStartPosition;
+
+      // Round to 3 decimal places to avoid floating-point precision issues
+      const roundedTotalPoints = Math.round(adjustedTotalPoints * 1000) / 1000;
+
       return {
         participant,
         results: participantResults,
-        totalPoints,
-        finalPosition: 0, // Will be set after sorting
+        totalPoints: roundedTotalPoints,
+        firstStartPosition: firstStartPosition,
       };
     });
 
-    // Sort by total points (lower is better)
+    // Sort by first start position (lower is better)
     const sortedResults = [...results].sort(
-      (a, b) => a.totalPoints - b.totalPoints
+      (a, b) => a.firstStartPosition - b.firstStartPosition
     );
-
-    // Assign final positions
-    sortedResults.forEach((result, index) => {
-      result.finalPosition = index + 1;
-    });
 
     return sortedResults;
   }, [participants, raceResults]);
 
   return (
-    <div>
+    <div className="overflow-x-auto -mx-3 sm:mx-0">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead rowSpan={2}>Position</TableHead>
-            <TableHead rowSpan={2}>Number</TableHead>
-            <TableHead rowSpan={2}>Name</TableHead>
-            <TableHead rowSpan={2}>Nickname</TableHead>
+            <TableHead rowSpan={2} className="py-2 px-2 sm:py-3 sm:px-4">
+              ##
+            </TableHead>
+            <TableHead rowSpan={2} className="py-2 px-2 sm:py-3 sm:px-4">
+              Nama
+            </TableHead>
+            <TableHead rowSpan={2} className="py-2 px-2 sm:py-3 sm:px-4">
+              Nick
+            </TableHead>
             {sortedRaces.map((race) => (
               <TableHead
                 key={race.id}
                 colSpan={3}
-                className="text-center border-x"
+                className="text-center border-x py-2 px-1 sm:py-3 sm:px-3"
               >
                 {race.name}
               </TableHead>
             ))}
-            <TableHead rowSpan={2}>Total Points</TableHead>
+            <TableHead rowSpan={2} className="py-2 px-2 sm:py-3 sm:px-4">
+              Point
+            </TableHead>
           </TableRow>
           <TableRow>
             {sortedRaces.map((race) => (
               <React.Fragment key={`header-${race.id}`}>
-                <TableHead className="text-xs">Start</TableHead>
-                <TableHead className="text-xs">Finish</TableHead>
-                <TableHead className="text-xs">Penalty</TableHead>
+                <TableHead className="text-xs py-1 px-1 sm:py-2 sm:px-2">
+                  S
+                </TableHead>
+                <TableHead className="text-xs py-1 px-1 sm:py-2 sm:px-2">
+                  F
+                </TableHead>
+                <TableHead className="text-xs py-1 px-1 sm:py-2 sm:px-2">
+                  Pen
+                </TableHead>
               </React.Fragment>
             ))}
           </TableRow>
@@ -275,24 +307,30 @@ function EnhancedRaceResultsTable({
         <TableBody>
           {aggregateResults.map((result) => (
             <TableRow key={result.participant.id}>
-              <TableCell className="font-medium">
-                {result.finalPosition}
+              <TableCell className="py-1 px-2 sm:py-2 sm:px-4">
+                {result.participant.number}
               </TableCell>
-              <TableCell>{result.participant.number}</TableCell>
-              <TableCell>{result.participant.name}</TableCell>
-              <TableCell>{result.participant.nickname}</TableCell>
+              <TableCell className="py-1 px-2 sm:py-2 sm:px-4">
+                {result.participant.name}
+              </TableCell>
+              <TableCell className="py-1 px-2 sm:py-2 sm:px-4">
+                {result.participant.nickname}
+              </TableCell>
 
               {result.results.map((raceResult) => (
                 <React.Fragment key={`result-${raceResult.raceId}`}>
-                  <TableCell className="border-l text-center">
+                  <TableCell className="border-l text-center py-1 px-1 sm:py-2 sm:px-2">
                     {raceResult.startPosition || "-"}
                   </TableCell>
-                  <TableCell className="text-center">
+                  <TableCell className="text-center py-1 px-1 sm:py-2 sm:px-2">
                     {raceResult.finishPosition || "-"}
                   </TableCell>
-                  <TableCell className="border-r text-center">
+                  <TableCell className="border-r text-center py-1 px-1 sm:py-2 sm:px-2">
                     {raceResult.penaltyPoints > 0 ? (
-                      <Badge variant="destructive">
+                      <Badge
+                        variant="destructive"
+                        className="text-xs sm:text-sm"
+                      >
                         +{raceResult.penaltyPoints}
                       </Badge>
                     ) : (
@@ -302,7 +340,7 @@ function EnhancedRaceResultsTable({
                 </React.Fragment>
               ))}
 
-              <TableCell className="font-medium">
+              <TableCell className="font-medium py-1 px-2 sm:py-2 sm:px-4">
                 {result.totalPoints || "-"}
               </TableCell>
             </TableRow>

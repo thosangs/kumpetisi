@@ -21,34 +21,30 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import type { Participant, Race } from "@/types";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { Participant, Race, RaceResult } from "@/types";
 
 interface EnhancedRaceResultsFormProps {
-  batchId: number;
-  races: Race[];
-  participants: Participant[];
-  existingResults?: {
-    raceId: number;
-    participantId: number;
-    startPosition: number;
-    finishPosition: number;
-    penaltyPoints: number;
-  }[];
-  onSave: () => void;
-  totalBatchCount: number;
+  results: {
+    batchId: number;
+    races: Race[];
+    participants: Participant[];
+    existingResults?: RaceResult[];
+    totalBatchCount: number;
+  };
 }
 
 export function EnhancedRaceResultsForm({
-  batchId,
-  races,
-  participants,
-  existingResults = [],
-  onSave,
-  totalBatchCount,
+  results,
 }: EnhancedRaceResultsFormProps) {
-  const [activeTab, setActiveTab] = useState<string>("race-1");
-  const [results, setResults] = useState<{
+  const {
+    batchId,
+    races,
+    participants,
+    existingResults = [],
+    totalBatchCount,
+  } = results;
+
+  const [formResults, setFormResults] = useState<{
     [raceId: number]: {
       [participantId: number]: {
         startPosition: number | null;
@@ -82,7 +78,7 @@ export function EnhancedRaceResultsForm({
       });
     });
 
-    setResults(initialResults);
+    setFormResults(initialResults);
     // Only run this effect when the dependencies actually change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -96,7 +92,7 @@ export function EnhancedRaceResultsForm({
     participantId: number,
     value: string
   ) => {
-    setResults((prev) => ({
+    setFormResults((prev) => ({
       ...prev,
       [raceId]: {
         ...prev[raceId],
@@ -113,7 +109,7 @@ export function EnhancedRaceResultsForm({
     participantId: number,
     value: string
   ) => {
-    setResults((prev) => ({
+    setFormResults((prev) => ({
       ...prev,
       [raceId]: {
         ...prev[raceId],
@@ -130,7 +126,7 @@ export function EnhancedRaceResultsForm({
     participantId: number,
     value: string
   ) => {
-    setResults((prev) => ({
+    setFormResults((prev) => ({
       ...prev,
       [raceId]: {
         ...prev[raceId],
@@ -144,8 +140,8 @@ export function EnhancedRaceResultsForm({
 
   const validateResults = () => {
     // Check if all required fields are filled
-    for (const raceId in results) {
-      const raceResults = results[raceId];
+    for (const raceId in formResults) {
+      const raceResults = formResults[raceId];
 
       // Get all finish positions that are set
       const finishPositions = Object.values(raceResults)
@@ -174,7 +170,7 @@ export function EnhancedRaceResultsForm({
     setIsSubmitting(true);
 
     // Format results for submission
-    const formattedResults = Object.entries(results).flatMap(
+    const formattedResults = Object.entries(formResults).flatMap(
       ([raceId, raceResults]) =>
         Object.entries(raceResults).map(([participantId, result]) => ({
           raceId: Number.parseInt(raceId),
@@ -192,7 +188,6 @@ export function EnhancedRaceResultsForm({
         description: "Race results have been updated successfully.",
       });
       setIsSubmitting(false);
-      onSave();
     }, 1000);
   };
 
@@ -203,56 +198,65 @@ export function EnhancedRaceResultsForm({
   const participantFinalPoints = useMemo(() => {
     const points: { [participantId: number]: number | string } = {};
     participants.forEach((participant) => {
-      points[participant.id] = calculateFinalPoints(participant.id, results);
+      points[participant.id] = calculateFinalPoints(
+        participant.id,
+        formResults
+      );
     });
     return points;
-  }, [participants, results]);
+  }, [participants, formResults]);
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Update Race Results</CardTitle>
-        <CardDescription>
-          Enter the start position, finish position, and any penalty points for
-          each participant
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-4">
-            {sortedRaces.map((race, index) => (
-              <TabsTrigger key={race.id} value={`race-${index + 1}`}>
-                {race.name}
-              </TabsTrigger>
-            ))}
-            <TabsTrigger value="all-races">All Races</TabsTrigger>
-          </TabsList>
+      <CardContent className="px-1">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead rowSpan={2}>Number</TableHead>
+              <TableHead rowSpan={2}>Name</TableHead>
+              <TableHead rowSpan={2}>Nickname</TableHead>
+              {sortedRaces.map((race) => (
+                <TableHead
+                  key={race.id}
+                  colSpan={3}
+                  className="text-center border-x"
+                >
+                  {race.name}
+                </TableHead>
+              ))}
+              <TableHead rowSpan={2}>Final Points</TableHead>
+            </TableRow>
+            <TableRow>
+              {sortedRaces.map((race) => (
+                <React.Fragment key={`header-${race.id}`}>
+                  <TableHead className="text-xs">Start</TableHead>
+                  <TableHead className="text-xs">Finish</TableHead>
+                  <TableHead className="text-xs">Penalty</TableHead>
+                </React.Fragment>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {participants.map((participant) => {
+              // Get final points from memoized object
+              const finalPoints = participantFinalPoints[participant.id];
 
-          {sortedRaces.map((race, index) => (
-            <TabsContent key={race.id} value={`race-${index + 1}`}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Number</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Nickname</TableHead>
-                    <TableHead className="w-24">Start Position</TableHead>
-                    <TableHead className="w-24">Finish Position</TableHead>
-                    <TableHead className="w-24">Penalty</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {participants.map((participant) => {
-                    const result = results[race.id]?.[participant.id];
+              return (
+                <TableRow key={participant.id}>
+                  <TableCell className="font-medium">
+                    {participant.number}
+                  </TableCell>
+                  <TableCell>{participant.name}</TableCell>
+                  <TableCell>{participant.nickname}</TableCell>
+
+                  {sortedRaces.map((race) => {
+                    const result = formResults[race.id]?.[participant.id];
 
                     return (
-                      <TableRow key={participant.id}>
-                        <TableCell className="font-medium">
-                          {participant.number}
-                        </TableCell>
-                        <TableCell>{participant.name}</TableCell>
-                        <TableCell>{participant.nickname}</TableCell>
-                        <TableCell>
+                      <React.Fragment
+                        key={`result-${race.id}-${participant.id}`}
+                      >
+                        <TableCell className="border-l">
                           <Input
                             type="number"
                             min="1"
@@ -265,7 +269,7 @@ export function EnhancedRaceResultsForm({
                                 e.target.value
                               )
                             }
-                            className="w-16"
+                            className="w-12 h-8 text-xs"
                           />
                         </TableCell>
                         <TableCell>
@@ -281,10 +285,10 @@ export function EnhancedRaceResultsForm({
                                 e.target.value
                               )
                             }
-                            className="w-16"
+                            className="w-12 h-8 text-xs"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="border-r">
                           <Input
                             type="number"
                             min="0"
@@ -296,126 +300,19 @@ export function EnhancedRaceResultsForm({
                                 e.target.value
                               )
                             }
-                            className="w-16"
+                            className="w-12 h-8 text-xs"
                           />
                         </TableCell>
-                      </TableRow>
+                      </React.Fragment>
                     );
                   })}
-                </TableBody>
-              </Table>
-            </TabsContent>
-          ))}
 
-          <TabsContent value="all-races">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead rowSpan={2}>Number</TableHead>
-                  <TableHead rowSpan={2}>Name</TableHead>
-                  <TableHead rowSpan={2}>Nickname</TableHead>
-                  {sortedRaces.map((race) => (
-                    <TableHead
-                      key={race.id}
-                      colSpan={3}
-                      className="text-center border-x"
-                    >
-                      {race.name}
-                    </TableHead>
-                  ))}
-                  <TableHead rowSpan={2}>Final Points</TableHead>
+                  <TableCell className="font-medium">{finalPoints}</TableCell>
                 </TableRow>
-                <TableRow>
-                  {sortedRaces.map((race) => (
-                    <React.Fragment key={`header-${race.id}`}>
-                      <TableHead className="text-xs">Start</TableHead>
-                      <TableHead className="text-xs">Finish</TableHead>
-                      <TableHead className="text-xs">Penalty</TableHead>
-                    </React.Fragment>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {participants.map((participant) => {
-                  // Get final points from memoized object
-                  const finalPoints = participantFinalPoints[participant.id];
-
-                  return (
-                    <TableRow key={participant.id}>
-                      <TableCell className="font-medium">
-                        {participant.number}
-                      </TableCell>
-                      <TableCell>{participant.name}</TableCell>
-                      <TableCell>{participant.nickname}</TableCell>
-
-                      {sortedRaces.map((race) => {
-                        const result = results[race.id]?.[participant.id];
-
-                        return (
-                          <React.Fragment
-                            key={`result-${race.id}-${participant.id}`}
-                          >
-                            <TableCell className="border-l">
-                              <Input
-                                type="number"
-                                min="1"
-                                max={participants.length}
-                                value={result?.startPosition || ""}
-                                onChange={(e) =>
-                                  handleStartPositionChange(
-                                    race.id,
-                                    participant.id,
-                                    e.target.value
-                                  )
-                                }
-                                className="w-12 h-8 text-xs"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="number"
-                                min="1"
-                                max={participants.length}
-                                value={result?.finishPosition || ""}
-                                onChange={(e) =>
-                                  handleFinishPositionChange(
-                                    race.id,
-                                    participant.id,
-                                    e.target.value
-                                  )
-                                }
-                                className="w-12 h-8 text-xs"
-                              />
-                            </TableCell>
-                            <TableCell className="border-r">
-                              <Input
-                                type="number"
-                                min="0"
-                                value={result?.penaltyPoints || ""}
-                                onChange={(e) =>
-                                  handlePenaltyChange(
-                                    race.id,
-                                    participant.id,
-                                    e.target.value
-                                  )
-                                }
-                                className="w-12 h-8 text-xs"
-                              />
-                            </TableCell>
-                          </React.Fragment>
-                        );
-                      })}
-
-                      <TableCell className="font-medium">
-                        {finalPoints}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TabsContent>
-        </Tabs>
+              );
+            })}
+          </TableBody>
+        </Table>
       </CardContent>
       <CardFooter>
         <Button

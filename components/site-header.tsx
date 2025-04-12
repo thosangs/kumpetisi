@@ -12,7 +12,6 @@ export function SiteHeader() {
           <span className="font-bold text-xl">Kumpetisi</span>
         </Link>
         <div className="flex items-center gap-2">
-          <ModeToggle />
           <Link href="/login">
             <Button variant="outline" size="sm">
               Login
@@ -26,6 +25,7 @@ export function SiteHeader() {
               Dashboard
             </Button>
           </Link>
+          <ModeToggle />
         </div>
       </div>
     </header>

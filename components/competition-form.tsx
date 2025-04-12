@@ -15,6 +15,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
@@ -25,13 +26,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { TiptapEditor } from "@/components/tiptap-editor";
+import { type Competition } from "@/lib/supabase";
 
 const formSchema = z.object({
   name: z.string().min(2, {
     message: "Name must be at least 2 characters.",
   }),
-  shortCode: z
+  short_code: z
     .string()
     .min(2, {
       message: "Short code must be at least 2 characters.",
@@ -42,6 +43,9 @@ const formSchema = z.object({
     .regex(/^[a-z0-9]+$/, {
       message: "Short code can only contain lowercase letters and numbers.",
     }),
+  description: z.string().min(10, {
+    message: "Description must be at least 10 characters.",
+  }),
   startDate: z.date({
     required_error: "Start date is required.",
   }),
@@ -60,84 +64,89 @@ const formSchema = z.object({
 });
 
 interface CompetitionFormProps {
-  competition: {
-    id: number;
-    name: string;
-    shortCode: string;
-    date: string;
-    location: string;
-    rules: string;
-    schedule: string;
-    logo: string;
-  };
+  competition?: Competition;
+  onSubmit?: (values: z.infer<typeof formSchema>) => Promise<void>;
 }
 
-export function CompetitionForm({ competition }: CompetitionFormProps) {
+export function CompetitionForm({
+  competition,
+  onSubmit: externalSubmit,
+}: CompetitionFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Parse the date string to get start and end dates
-  const startDate = new Date(`May 15, 2025`); // Hardcoded for demo
-  const endDate = new Date(`May 17, 2025`); // Hardcoded for demo
+  const defaultStartDate = competition?.start_date
+    ? new Date(competition.start_date)
+    : new Date();
+  const defaultEndDate = competition?.end_date
+    ? new Date(competition.end_date)
+    : new Date();
 
-  // Convert Markdown to HTML for initial values
-  const initialRules = `<h1>Competition Rules</h1>
-<h2>General Rules</h2>
-<ol>
-  <li>All participants must wear safety gear</li>
-  <li>Bikes must meet safety standards</li>
-  <li>No outside assistance during races</li>
-</ol>
-<h2>Race Format</h2>
-<ul>
-  <li>Qualifying rounds</li>
-  <li>Quarter-finals</li>
-  <li>Semi-finals</li>
-  <li>Finals</li>
-</ul>`;
+  // Convert to plain text for initial values
+  const initialRules = `Competition Rules
 
-  const initialSchedule = `<h1>Event Schedule</h1>
-<h2>Day 1 - May 15, 2025</h2>
-<ul>
-  <li>08:00 - 10:00: Registration</li>
-  <li>10:30 - 12:30: Qualifying rounds (Classes 1-4)</li>
-  <li>14:00 - 16:00: Qualifying rounds (Classes 5-8)</li>
-</ul>
-<h2>Day 2 - May 16, 2025</h2>
-<ul>
-  <li>09:00 - 12:00: Quarter-finals</li>
-  <li>13:30 - 16:30: Semi-finals</li>
-</ul>
-<h2>Day 3 - May 17, 2025</h2>
-<ul>
-  <li>09:00 - 12:00: Finals</li>
-  <li>14:00 - 15:00: Award ceremony</li>
-</ul>`;
+General Rules:
+1. All participants must wear safety gear
+2. Bikes must meet safety standards
+3. No outside assistance during races
+
+Race Format:
+- Qualifying rounds
+- Quarter-finals
+- Semi-finals
+- Finals`;
+
+  const initialSchedule = `Event Schedule
+
+Day 1 - May 15, 2025:
+08:00 - 10:00: Registration
+10:30 - 12:30: Qualifying rounds (Classes 1-4)
+14:00 - 16:00: Qualifying rounds (Classes 5-8)
+
+Day 2 - May 16, 2025:
+09:00 - 12:00: Quarter-finals
+13:30 - 16:30: Semi-finals
+
+Day 3 - May 17, 2025:
+09:00 - 12:00: Finals
+14:00 - 15:00: Award ceremony`;
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      name: competition.name,
-      shortCode: competition.shortCode,
-      startDate: startDate,
-      endDate: endDate,
-      location: competition.location,
-      rules: initialRules,
-      schedule: initialSchedule,
+      name: competition?.name || "",
+      short_code: competition?.short_code || "",
+      description: competition?.description || "",
+      startDate: defaultStartDate,
+      endDate: defaultEndDate,
+      location: competition?.location || "",
+      rules: competition?.rules || initialRules,
+      schedule: competition?.schedule || initialSchedule,
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    setIsSubmitting(true);
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      console.log(values);
-      toast("Competition updated", {
-        description: "Your competition details have been updated successfully.",
+      if (externalSubmit) {
+        await externalSubmit(values);
+      }
+
+      toast.success(
+        `Competition ${competition ? "updated" : "created"} successfully!`,
+        {
+          description: "Your changes have been saved.",
+        }
+      );
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      toast.error("Error", {
+        description: "Something went wrong. Please try again.",
       });
+    } finally {
       setIsSubmitting(false);
-    }, 1000);
-  }
+    }
+  };
 
   return (
     <Form {...form}>
@@ -162,7 +171,7 @@ export function CompetitionForm({ competition }: CompetitionFormProps) {
 
           <FormField
             control={form.control}
-            name="shortCode"
+            name="short_code"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Short Code</FormLabel>
@@ -171,6 +180,27 @@ export function CompetitionForm({ competition }: CompetitionFormProps) {
                 </FormControl>
                 <FormDescription>
                   Used in the URL: kumpetisi.com/{field.value}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem className="col-span-2">
+                <FormLabel>Description</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Brief description of your competition"
+                    className="min-h-[100px]"
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Describe what your competition is about.
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -286,14 +316,14 @@ export function CompetitionForm({ competition }: CompetitionFormProps) {
                 <FormItem>
                   <FormLabel>Rules</FormLabel>
                   <FormControl>
-                    <TiptapEditor
-                      content={field.value}
-                      onChange={field.onChange}
+                    <Textarea
                       placeholder="Enter competition rules..."
+                      className="min-h-[200px]"
+                      {...field}
                     />
                   </FormControl>
                   <FormDescription>
-                    Competition rules in rich text format.
+                    Competition rules in plain text format.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -309,14 +339,14 @@ export function CompetitionForm({ competition }: CompetitionFormProps) {
                 <FormItem>
                   <FormLabel>Schedule</FormLabel>
                   <FormControl>
-                    <TiptapEditor
-                      content={field.value}
-                      onChange={field.onChange}
+                    <Textarea
                       placeholder="Enter event schedule..."
+                      className="min-h-[200px]"
+                      {...field}
                     />
                   </FormControl>
                   <FormDescription>
-                    Event schedule in rich text format.
+                    Event schedule in plain text format.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

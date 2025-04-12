@@ -19,24 +19,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ParticipantsList } from "@/components/participants-list";
+import { type Class } from "@/lib/supabase";
 
 interface ClassesListProps {
-  classes: {
-    id: number;
-    competitionId: number;
-    name: string;
-    stages: {
-      id: number;
-      name: string;
-      status: string;
-    }[];
-    batches: {
-      id: number;
-      name: string;
-      maxParticipants: number;
-      stageId: number;
-    }[];
-  }[];
+  classes: Class[];
   competitionShortCode: string;
 }
 
@@ -203,7 +189,7 @@ export function ClassesList({
   competitionShortCode,
 }: ClassesListProps) {
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(
-    classes[0]?.batches[0]?.id || null
+    classes[0]?.stages?.[0]?.batches?.[0]?.id || null
   );
 
   const getStageStatusBadge = (status: string) => {
@@ -243,73 +229,44 @@ export function ClassesList({
               <div className="pt-4 pb-2">
                 <h4 className="text-sm font-medium mb-4">Stages</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                  {cls.stages.map((stage) => (
+                  {cls.stages?.map((stage) => (
                     <Card key={stage.id}>
                       <CardHeader className="pb-2">
                         <CardTitle className="text-base flex justify-between items-center">
                           <span>{stage.name}</span>
-                          {getStageStatusBadge(stage.status)}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <p className="text-sm text-muted-foreground">
-                          {
-                            cls.batches.filter((b) => b.stageId === stage.id)
-                              .length
-                          }{" "}
-                          batches
-                        </p>
+                        <div className="space-y-2">
+                          {stage.batches?.map((batch) => (
+                            <Button
+                              key={batch.id}
+                              variant={
+                                selectedBatchId === batch.id
+                                  ? "default"
+                                  : "outline"
+                              }
+                              className="w-full justify-start"
+                              onClick={() =>
+                                setSelectedBatchId(batch.id ?? null)
+                              }
+                            >
+                              {batch.name}
+                            </Button>
+                          ))}
+                        </div>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
-
-                <h4 className="text-sm font-medium mb-2">Batches</h4>
-                <Tabs
-                  defaultValue={cls.batches[0]?.id.toString()}
-                  onValueChange={(value) =>
-                    setSelectedBatchId(Number.parseInt(value))
-                  }
-                >
-                  <TabsList className="mb-4">
-                    {cls.batches.map((batch) => {
-                      const stage = cls.stages.find(
-                        (s) => s.id === batch.stageId
-                      );
-                      return (
-                        <TabsTrigger key={batch.id} value={batch.id.toString()}>
-                          {batch.name} ({stage?.name})
-                        </TabsTrigger>
-                      );
-                    })}
-                  </TabsList>
-                  {cls.batches.map((batch) => {
-                    const stage = cls.stages.find(
-                      (s) => s.id === batch.stageId
-                    );
-                    return (
-                      <TabsContent key={batch.id} value={batch.id.toString()}>
-                        <Card>
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-base">
-                              {batch.name}
-                            </CardTitle>
-                            <CardDescription>
-                              {stage?.name} - Maximum {batch.maxParticipants}{" "}
-                              participants
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <ParticipantsList
-                              participants={getParticipantsByBatchId(batch.id)}
-                              showResults={stage?.status !== "scheduled"}
-                            />
-                          </CardContent>
-                        </Card>
-                      </TabsContent>
-                    );
-                  })}
-                </Tabs>
+                {selectedBatchId && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-4">Participants</h4>
+                    <ParticipantsList
+                      participants={getParticipantsByBatchId(selectedBatchId)}
+                    />
+                  </div>
+                )}
               </div>
             </AccordionContent>
           </AccordionItem>

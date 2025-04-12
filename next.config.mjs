@@ -5,6 +5,9 @@ const nextConfig = {
   },
   images: {
     domains: ["placeholder.pics"],
+    dangerouslyAllowSVG: true,
+    contentDispositionType: "attachment",
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 };
 

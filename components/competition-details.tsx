@@ -1,22 +1,42 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CalendarIcon, MapPinIcon, Users2Icon, TrophyIcon } from "lucide-react";
+import { type Competition } from "@/lib/supabase";
 
 interface CompetitionDetailsProps {
-  competition: {
-    id: number;
-    name: string;
-    shortCode: string;
-    date: string;
-    location: string;
-    participants: number;
-    classes: number;
-    logo: string;
-    rules: string;
-    schedule: string;
-  };
+  competition: Competition;
+}
+
+function formatDateRange(startDate: string, endDate: string): string {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  if (
+    start.getMonth() === end.getMonth() &&
+    start.getFullYear() === end.getFullYear()
+  ) {
+    return `${start.getDate()}-${end.getDate()} ${start.toLocaleString(
+      "default",
+      { month: "long" }
+    )} ${start.getFullYear()}`;
+  }
+
+  if (start.getFullYear() === end.getFullYear()) {
+    return `${start.getDate()} ${start.toLocaleString("default", {
+      month: "long",
+    })} - ${end.getDate()} ${end.toLocaleString("default", {
+      month: "long",
+    })} ${start.getFullYear()}`;
+  }
+
+  return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
 }
 
 export function CompetitionDetails({ competition }: CompetitionDetailsProps) {
+  const dateRange = formatDateRange(
+    competition.start_date,
+    competition.end_date
+  );
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -27,7 +47,7 @@ export function CompetitionDetails({ competition }: CompetitionDetailsProps) {
           <CardContent>
             <div className="flex items-center gap-2">
               <CalendarIcon className="h-5 w-5 text-muted-foreground" />
-              <span>{competition.date}</span>
+              <span>{dateRange}</span>
             </div>
           </CardContent>
         </Card>
@@ -49,7 +69,24 @@ export function CompetitionDetails({ competition }: CompetitionDetailsProps) {
           <CardContent>
             <div className="flex items-center gap-2">
               <Users2Icon className="h-5 w-5 text-muted-foreground" />
-              <span>{competition.participants} registered</span>
+              <span>
+                {competition.classes?.reduce(
+                  (total, cls) =>
+                    total +
+                    cls.stages.reduce(
+                      (stageTotal, stage) =>
+                        stageTotal +
+                        stage.batches.reduce(
+                          (batchTotal, batch) =>
+                            batchTotal + (batch.participants?.length || 0),
+                          0
+                        ),
+                      0
+                    ),
+                  0
+                ) || 0}{" "}
+                registered
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -60,7 +97,7 @@ export function CompetitionDetails({ competition }: CompetitionDetailsProps) {
           <CardContent>
             <div className="flex items-center gap-2">
               <TrophyIcon className="h-5 w-5 text-muted-foreground" />
-              <span>{competition.classes} classes</span>
+              <span>{competition.classes?.length || 0} classes</span>
             </div>
           </CardContent>
         </Card>
@@ -68,13 +105,7 @@ export function CompetitionDetails({ competition }: CompetitionDetailsProps) {
 
       <div>
         <h3 className="text-lg font-medium mb-2">About This Competition</h3>
-        <p className="text-muted-foreground">
-          {competition.name} is a premier pushbike racing event that brings
-          together the best riders from across the region. With{" "}
-          {competition.classes} different classes and over{" "}
-          {competition.participants} participants, this event promises exciting
-          races and fierce competition.
-        </p>
+        <p className="text-muted-foreground">{competition.description}</p>
       </div>
     </div>
   );
